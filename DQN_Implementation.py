@@ -18,25 +18,32 @@ class QNetwork():
 
 		# Model
 		self.states = tf.placeholder(name='states', shape=(None, num_observations), dtype=tf.float32)
-		self.Q = config.fc_layer('Q', self.states, input_size=num_observations, num_units=num_actions, activation=None)
+		self.hidden = config.fc_layer('hidden', self.states, input_size=num_observations, num_units=100)
+		self.Q = config.fc_layer('Q', self.hidden, input_size=100, num_units=num_actions, activation=None)
+
+		# For dueling networks
+		# value = config.fc_layer('value', self.hidden, input_size=100, num_units=1, activation=None)
+		# advantage = config.fc_layer('advantage', self.hidden, input_size=100, num_units=num_actions, activation=None)
+		# self.Q = (advantage - tf.reshape(tf.reduce_mean(advantage, axis=1), (-1, 1))) + tf.reshape(value, (-1, 1))
 
 		# Loss
 		self.Q_target = tf.placeholder(name='Q_target', shape=(None,), dtype=tf.float32)
 		self.actions = tf.placeholder(name='actions', shape=(None,), dtype=tf.int32)
 		actions_one_hot = tf.one_hot(self.actions, depth=num_actions)
 		self.Q_pred = tf.reduce_sum(actions_one_hot * self.Q, axis=1)
-		self.loss = tf.reduce_sum(tf.losses.huber_loss(self.Q_target, self.Q_pred))
+		self.loss = tf.reduce_mean(tf.losses.huber_loss(self.Q_target, self.Q_pred))
 
 		# Optimizer
 		self.optim = tf.train.RMSPropOptimizer(learning_rate=config.lr).minimize(self.loss)
 
 	def save_model_weights(self, step, model_save_path):
 		# Helper function to save your model / weights.
-		self.saver.save(self.tf_sess, global_step=step, save_path=model_save_path)
+		self.saver.save(self.tf_sess, global_step=step, save_path=model_save_path + config.exp_name)
 		print('Model saved to {0}'.format(model_save_path))
 
 	def load_model_weights(self, model_load_path):
 		# Helper funciton to load model weights.
+		#self.tf_sess.run(tf.global_variables_initializer())
 		self.saver.restore(self.tf_sess, model_load_path)
 		print('Model loaded from {0}'.format(model_load_path))
 
@@ -139,7 +146,6 @@ class DQN_Agent():
 
 		# If you are using a replay memory, you should interact with environment here, and store these 
 		# transitions to memory, while also updating your model.
-		self.model = QNetwork(self.env)
 		self.model.tf_sess = tf.Session()
 		self.model.saver = tf.train.Saver()
 		init = tf.global_variables_initializer()
@@ -171,6 +177,9 @@ class DQN_Agent():
 			next_states = next_state[np.newaxis]
 			dones = int(done)
 
+			# For experience replay
+			# states, actions, rewards, next_states, dones = self.replay_memory.sample_batch(config.batch_size)
+
 			# Generate targets for the batch
 			Q_next_state = self.model.tf_sess.run(self.model.Q, feed_dict={self.model.states: next_states})
 			max_Q_next_state = np.max(Q_next_state, axis=1)
@@ -180,10 +189,7 @@ class DQN_Agent():
 			Q_target = np.array(Q_target)
 
 			# Update network
-			_, loss = self.model.tf_sess.run([self.model.optim, self.model.loss],
-														feed_dict = {self.model.actions: actions,
-																	 self.model.states: states,
-																	 self.model.Q_target: Q_target})
+			_, loss = self.model.tf_sess.run([self.model.optim, self.model.loss],feed_dict = {self.model.actions: actions, self.model.states: states, self.model.Q_target: Q_target})
 
 			# Update current state
 			if done:
@@ -198,8 +204,8 @@ class DQN_Agent():
 	def test(self, model_load_path, ep_count):
 		# Evaluate the performance of your agent over 100 episodes, by calculating cummulative rewards for the 100 episodes.
 		# Here you need to interact with the environment, irrespective of whether you are using a memory.
-		self.model = QNetwork(self.env)
 		self.model.tf_sess = tf.Session()
+		self.model.saver = tf.train.Saver()
 		self.model.load_model_weights(model_load_path)
 
 		# Initialize
@@ -212,18 +218,18 @@ class DQN_Agent():
 			state = state[np.newaxis]
 
 			# Run the test policy
-			action, reward, next_state, done = self.epsilon_greedy_policy(state, test_mode=True)
+			action, reward, next_state, done = self.greedy_policy(state)
+			cumulative_reward += reward
 
 			# Update
 			if done:
-				cumulative_reward += self.env.get_total_reward()
 				state = self.env.reset()
 				episodes += 1
 			else:
 				state = next_state
 
 		# Print performance
-		print('Average reward received: {0}'.format(cumulative_reward/100))
+		print('Average reward received: {0}'.format(cumulative_reward/ep_count))
 
 	def burn_in_memory(self, burn_in=10000):
 		# Initialize your replay memory with a burn_in number of episodes / transitions. 
@@ -245,7 +251,7 @@ def main():
 
 	agent = DQN_Agent(config.env_name, config.render)
 	agent.train(config.model_path)
-	agent.test(config.model_path, 100)
+	agent.test(config.model_path + config.exp_name + '-' + str(config.max_iterations-1), 100)
 
 
 if __name__ == '__main__':
