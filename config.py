@@ -22,6 +22,39 @@ def conv_layer(name, input, shape, stride, activation=tf.nn.relu):
 def preprocess(frame):
     return skimage.color.rgb2gray(skimage.transform.resize(frame, (84,84)))
 
+# Q estimation from features
+def estimate_Q(input, input_size, num_actions, dueling=False):
+    if dueling:
+        value = fc_layer('value', input, input_size=input_size, num_units=1, activation=None)
+        advantage = fc_layer('advantage', input, input_size=input_size, num_units=num_actions, activation=None)
+        Q = (advantage - tf.reshape(tf.reduce_mean(advantage, axis=1), (-1, 1))) + tf.reshape(value, (-1, 1))
+    else:
+        Q = fc_layer('Q', input, input_size=input_size, num_units=num_actions, activation=None)
+    return Q
+
+# Feature extractors
+def fc_extractor(input, input_size):
+    hidden1 = fc_layer('hidden1', input, input_size=input_size, num_units=10)
+    hidden2 = fc_layer('hidden2', hidden1, input_size=10, num_units=20)
+    hidden3 = fc_layer('hidden3', hidden2, input_size=20, num_units=30)
+    return hidden3
+
+def conv_extractor(input):
+    conv1 = conv_layer('conv1', input, shape=[8, 8, 4, 32], stride=4)
+    conv2 = conv_layer('conv2', conv1, shape=[4, 4, 32, 64], stride=2)
+    conv3 = conv_layer('conv3', conv2, shape=[3, 3, 64, 64], stride=1)
+    flatten = tf.reshape(conv3, (-1, 7*7*64))
+    fc = fc_layer('fc', flatten, input_size=7*7*64, num_units=512)
+    return fc
+
+def extractor(input, input_size, type):
+    if type=='linear':
+        return input, input_size
+    elif type=='fc':
+        return fc_extractor(input, input_size), 30
+    else:
+        return conv_extractor(input), 512
+
 # Experiment name
 exp_name = 'LinearQ-CartPole-1'
 
@@ -33,6 +66,12 @@ render = False
 
 # Whether to train
 train = True
+
+# Feature extractor
+extractor_type = 'linear'
+
+# Standard DQN or dueling
+dueling = False
 
 # Weights initializer
 kernel_initializer = tf.contrib.layers.xavier_initializer()

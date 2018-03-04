@@ -18,15 +18,8 @@ class QNetwork():
 
 		# Model
 		self.states = tf.placeholder(name='states', shape=(None, num_observations), dtype=tf.float32)
-		self.hidden1 = config.fc_layer('hidden1', self.states, input_size=num_observations, num_units=10)
-		self.hidden2 = config.fc_layer('hidden2', self.states, input_size=10, num_units=20)
-		self.hidden3 = config.fc_layer('hidden3', self.states, input_size=20, num_units=30)
-		self.Q = config.fc_layer('Q', self.hidden3, input_size=30, num_units=num_actions, activation=None)
-
-		# For dueling networks
-		# value = config.fc_layer('value', self.hidden, input_size=100, num_units=1, activation=None)
-		# advantage = config.fc_layer('advantage', self.hidden, input_size=100, num_units=num_actions, activation=None)
-		# self.Q = (advantage - tf.reshape(tf.reduce_mean(advantage, axis=1), (-1, 1))) + tf.reshape(value, (-1, 1))
+		self.features, feat_length = config.extractor(self.states, num_observations, config.extractor_type)
+		self.Q = config.estimate_Q(self.features, input_size=feat_length, num_actions=num_actions, dueling=config.dueling)
 
 		# Loss
 		self.Q_target = tf.placeholder(name='Q_target', shape=(None,), dtype=tf.float32)
