@@ -18,8 +18,10 @@ class QNetwork():
 
 		# Model
 		self.states = tf.placeholder(name='states', shape=(None, num_observations), dtype=tf.float32)
-		self.hidden = config.fc_layer('hidden', self.states, input_size=num_observations, num_units=100)
-		self.Q = config.fc_layer('Q', self.hidden, input_size=100, num_units=num_actions, activation=None)
+		self.hidden1 = config.fc_layer('hidden1', self.states, input_size=num_observations, num_units=10)
+		self.hidden2 = config.fc_layer('hidden2', self.states, input_size=10, num_units=20)
+		self.hidden3 = config.fc_layer('hidden3', self.states, input_size=20, num_units=30)
+		self.Q = config.fc_layer('Q', self.hidden3, input_size=30, num_units=num_actions, activation=None)
 
 		# For dueling networks
 		# value = config.fc_layer('value', self.hidden, input_size=100, num_units=1, activation=None)
@@ -31,7 +33,7 @@ class QNetwork():
 		self.actions = tf.placeholder(name='actions', shape=(None,), dtype=tf.int32)
 		actions_one_hot = tf.one_hot(self.actions, depth=num_actions)
 		self.Q_pred = tf.reduce_sum(actions_one_hot * self.Q, axis=1)
-		self.loss = tf.reduce_mean(tf.losses.huber_loss(self.Q_target, self.Q_pred))
+		self.loss = tf.reduce_mean((self.Q_target - self.Q_pred)**2)
 
 		# Optimizer
 		self.optim = tf.train.RMSPropOptimizer(learning_rate=config.lr).minimize(self.loss)
@@ -216,7 +218,7 @@ class DQN_Agent():
 		while episodes < ep_count:
 			# Convert state to 'batch'
 			state = state[np.newaxis]
-
+			self.env.render()
 			# Run the test policy
 			action, reward, next_state, done = self.greedy_policy(state)
 			cumulative_reward += reward
