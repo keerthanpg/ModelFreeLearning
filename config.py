@@ -70,6 +70,9 @@ train = True
 # Feature extractor
 extractor_type = 'linear'
 
+# Whether to use the experience replay
+use_replay = False
+
 # Standard DQN or dueling
 dueling = False
 

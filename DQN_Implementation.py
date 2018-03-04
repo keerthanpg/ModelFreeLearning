@@ -45,7 +45,7 @@ class QNetwork():
 
 class Replay_Memory():
 
-	def __init__(self, memory_size=50000):
+	def __init__(self, state_size, memory_size=50000):
 
 		# The memory essentially stores transitions recorder from the agent
 		# taking actions in the environment.
@@ -54,7 +54,16 @@ class Replay_Memory():
 		# randomly initialized agent. Memory size is the maximum size after which old elements in the memory are replaced. 
 		# A simple (if not the most efficient) was to implement the memory is as a list of transitions.
 		self.memory_size = memory_size
-		self.memory_list = [None] * self.memory_size
+		if config.extractor_type == 'conv':
+			self.states = np.empty((self.memory_size, 84, 84, 4), dtype=np.float32)
+			self.next_states = np.empty((self.memory_size, 84, 84, 4), dtype=np.float32)
+		else:
+			self.states = np.empty((self.memory_size, state_size), dtype=np.float32)
+			self.next_states = np.empty((self.memory_size, state_size), dtype=np.float32)
+		self.actions = np.empty((self.memory_size,), dtype=np.uint8)
+		self.rewards = np.empty((self.memory_size,), dtype=np.int8)
+
+		self.dones = np.empty((self.memory_size,), dtype=np.bool)
 		self.place_location = 0
 		self.filled = False
 
@@ -64,21 +73,25 @@ class Replay_Memory():
 
 		# Sample batch_size entries and split them into five arrays
 		if self.filled:
-			batch = np.array(random.sample(self.memory_list, batch_size)).T
+			batch = np.random.choice(self.memory_size, batch_size)
 		else:
-			batch = np.array(random.sample(self.memory_list[:self.place_location], batch_size)).T
+			batch = np.random.choice(self.place_location, batch_size)
 
-		states = batch[0]
-		actions = batch[1]
-		rewards = batch[2]
-		next_states = batch[3]
-		dones = batch[4]
+		states = self.states[batch]
+		actions = self.actions[batch]
+		rewards = self.rewards[batch]
+		next_states = self.next_states[batch]
+		dones = self.dones[batch]
 
-		return states, actions, rewards, next_states, dones
+		return states, actions, rewards, next_states, dones.astype(int)
 
 	def append(self, transition):
 		# Appends transition to the memory.
-		self.memory_list[self.place_location] = transition
+		self.states[self.place_location] = transition[0]
+		self.actions[self.place_location] = transition[1]
+		self.rewards[self.place_location] = transition[2]
+		self.next_states[self.place_location] = transition[3]
+		self.dones[self.place_location] = transition[4]
 		self.place_location += 1
 		if self.place_location == self.memory_size:
 			self.place_location = 0
@@ -101,7 +114,7 @@ class DQN_Agent():
 		# Here is also a good place to set environmental parameters,
 		# as well as training parameters - number of episodes / iterations, etc. 
 		self.env = gym.make(environment_name)
-		self.replay_memory = Replay_Memory()
+		self.replay_memory = Replay_Memory(self.env.observation_space.shape[0])
 		self.model = QNetwork(self.env)
 
 	def epsilon_greedy_policy(self, state, i=0, test_mode=False):
@@ -159,29 +172,24 @@ class DQN_Agent():
 			if i % 1000 == 0:
 				print('{0}/{1}'.format(i, config.max_iterations))
 
-			# Convert state into a 'batch' for the network
-			state = state[np.newaxis]
 
 			# Take an epsilon-greedy step
-			action, reward, next_state, done = self.epsilon_greedy_policy(state, i)
+			action, reward, next_state, done = self.epsilon_greedy_policy(state[np.newaxis], i)
 
-			# For stochastic online training
-			states = state
-			actions = np.array([action])
-			rewards = reward
-			next_states = next_state[np.newaxis]
-			dones = int(done)
-
-			# For experience replay
-			# states, actions, rewards, next_states, dones = self.replay_memory.sample_batch(config.batch_size)
+			if config.use_replay:
+				states, actions, rewards, next_states, dones = self.replay_memory.sample_batch(config.batch_size)
+			else:
+				# Hacky conversions to 'batch' for stochastic online training
+				states = state[np.newaxis]
+				actions = np.array([action])
+				rewards = reward
+				next_states = next_state[np.newaxis]
+				dones = int(done)
 
 			# Generate targets for the batch
 			Q_next_state = self.model.tf_sess.run(self.model.Q, feed_dict={self.model.states: next_states})
 			max_Q_next_state = np.max(Q_next_state, axis=1)
 			Q_target = rewards + max_Q_next_state * config.discount_factor * (1. - dones)
-
-			# For stochastic online training
-			Q_target = np.array(Q_target)
 
 			# Update network
 			_, loss = self.model.tf_sess.run([self.model.optim, self.model.loss],feed_dict = {self.model.actions: actions, self.model.states: states, self.model.Q_target: Q_target})
@@ -210,10 +218,9 @@ class DQN_Agent():
 
 		while episodes < ep_count:
 			# Convert state to 'batch'
-			state = state[np.newaxis]
 			self.env.render()
 			# Run the test policy
-			action, reward, next_state, done = self.greedy_policy(state)
+			action, reward, next_state, done = self.greedy_policy(state[np.newaxis])
 			cumulative_reward += reward
 
 			# Update
@@ -245,6 +252,8 @@ def main():
 	# You want to create an instance of the DQN_Agent class here, and then train / test it.
 
 	agent = DQN_Agent(config.env_name, config.render)
+	if config.use_replay:
+		agent.burn_in_memory(config.burn_in)
 	agent.train(config.model_path)
 	agent.test(config.model_path + config.exp_name + '-' + str(config.max_iterations-1), 100)
 
