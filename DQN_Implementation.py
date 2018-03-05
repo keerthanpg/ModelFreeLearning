@@ -147,7 +147,7 @@ class DQN_Agent():
 		next_state, reward, done, _ = self.env.step(action)
 		return action, reward, next_state, done
 
-	def train(self, model_save_path, model_load_path=None):
+	def train(self, model_save_path, iters, avg_rewards, model_load_path=None):
 		# In this function, we will train our network. 
 		# If training without experience replay_memory, then you will interact with the environment 
 		# in this function, while also updating your network parameters. 
@@ -204,6 +204,38 @@ class DQN_Agent():
 			if i % (config.max_iterations // 3)  == 0:
 				self.model.save_model_weights(i, model_save_path)
 
+			if i%10000== 0:				
+				ep_count=20
+				stateT = self.env.reset()
+				episodesT = 0
+				cumulative_rewardT = 0.
+
+				while episodesT < ep_count:
+					# Convert state to 'batch'
+					stateT = stateT[np.newaxis]			
+					
+					# Run the test policy
+					actionT, rewardT, next_stateT, doneT = self.epsilon_greedy_policy(stateT)
+					cumulative_rewardT += rewardT
+
+					# Update
+					if doneT:
+						stateT = self.env.reset()
+						episodesT += 1
+					else:
+						stateT = next_stateT
+
+				# Print performance
+				avg_reward=cumulative_rewardT/ep_count
+				print('Average reward received: {0}'.format(avg_reward))
+				
+				#self.model.save_model_weights(i, model_save_path)
+				#avg_reward=self.calculate_avg_reward(i)
+				iters.append(i)
+				avg_rewards.append(avg_reward)
+
+		return (iters,avg_rewards)
+
 	def test(self, model_load_path, ep_count):
 		# Evaluate the performance of your agent over 100 episodes, by calculating cummulative rewards for the 100 episodes.
 		# Here you need to interact with the environment, irrespective of whether you are using a memory.
@@ -241,6 +273,16 @@ class DQN_Agent():
 			next_state, reward, done, _ = self.env.step(action)
 			self.replay_memory.append((state, action, reward, next_state, done))
 
+def generate_plot(iters, avg_rewards):
+	plt.xlabel('iterations')
+	plt.ylabel('Avg Reward')
+	plt.plot(iters, avg_rewards)
+	plt.savefig( config.model_path + config.exp_name +'PerformancePlot'+'.png')
+	f=open(config.model_path + config.exp_name +'iters.p', 'wb')
+	pickle.dump(iters, f)
+	f=open(config.model_path + config.exp_name +'avg_rewards.p', 'wb')
+	pickle.dump(avg_rewards, f)
+
 
 def main():
 
@@ -250,11 +292,14 @@ def main():
 	# sess = tf.Session(config=config)
 
 	# You want to create an instance of the DQN_Agent class here, and then train / test it.
-
+	iters=[]
+	avg_rewards=[]
 	agent = DQN_Agent(config.env_name, config.render)
 	if config.use_replay:
 		agent.burn_in_memory(config.burn_in)
-	agent.train(config.model_path)
+	#agent.train(config.model_path)
+	iters, avg_rewards = agent.train(config.model_path, iters, avg_rewards)
+	generate_plot(iters,avg_rewards)	
 	agent.test(config.model_path + config.exp_name + '-' + str(config.max_iterations-1), 100)
 
 

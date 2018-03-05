@@ -207,30 +207,29 @@ class DQN_Agent():
 			if i % (config.max_iterations // 3)  == 0:
 				self.model.save_model_weights(i, model_save_path)
 
-			if i%10000== 0:
-				
+			if i%10000== 0:				
 				ep_count=20
-				state = self.env.reset()
-				episodes = 0
-				cumulative_reward = 0.
+				stateT = self.env.reset()
+				episodesT = 0
+				cumulative_rewardT = 0.
 
-				while episodes < ep_count:
+				while episodesT < ep_count:
 					# Convert state to 'batch'
 					state = state[np.newaxis]			
 					
 					# Run the test policy
-					action, reward, next_state, done = self.epsilon_greedy_policy(state)
-					cumulative_reward += reward
+					actionT, rewardT, next_stateT, doneT = self.epsilon_greedy_policy(state)
+					cumulative_rewardT += rewardT
 
 					# Update
-					if done:
-						state = self.env.reset()
-						episodes += 1
+					if doneT:
+						stateT = self.env.reset()
+						episodesT += 1
 					else:
-						state = next_state
+						stateT = next_stateT
 
 				# Print performance
-				avg_reward=cumulative_reward/ep_count
+				avg_reward=cumulative_rewardT/ep_count
 				print('Average reward received: {0}'.format(avg_reward))
 				
 				#self.model.save_model_weights(i, model_save_path)
