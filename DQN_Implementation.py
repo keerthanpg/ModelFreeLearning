@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-import keras, tensorflow as tf, numpy as np, gym, sys, copy, random
+import tensorflow as tf, numpy as np, gym, sys, copy, random
 import config
 
 
@@ -33,8 +33,7 @@ class QNetwork():
 
 	def save_model_weights(self, step, model_save_path):
 		# Helper function to save your model / weights.
-		self.saver.save(self.tf_sess, global_step=step, save_path=model_save_path + config.exp_name)
-		self.saver.save(self.tf_sess, global_step=step, save_path=model_save_path + config.exp_name)
+		self.saver.save(self.tf_sess, global_step=step, save_path=model_save_path + config.exp_name, max_to_keep=config.max_iterations)
 		print('Model saved to {0}'.format(model_save_path))
 
 	def load_model_weights(self, model_load_path):
@@ -148,7 +147,7 @@ class DQN_Agent():
 		next_state, reward, done, _ = self.env.step(action)
 		return action, reward, next_state, done
 
-	def train(self, model_save_path, render, iters, avg_rewards, model_load_path=None):
+	def train(self, model_save_path, model_load_path=None):
 		# In this function, we will train our network. 
 		# If training without experience replay_memory, then you will interact with the environment 
 		# in this function, while also updating your network parameters. 
@@ -166,9 +165,8 @@ class DQN_Agent():
 
 		# Get the initial state
 		state = self.env.reset()
-		testFlag = 0
 
-		for i in range(config.max_iterations):
+		for i in range(config.max_iterations+1):
 
 			# Print progress
 			if i % 1000 == 0:
@@ -177,9 +175,6 @@ class DQN_Agent():
 
 			# Take an epsilon-greedy step
 			action, reward, next_state, done = self.epsilon_greedy_policy(state[np.newaxis], i)
-
-			if render:
-				self.env.render()
 
 			if config.use_replay:
 				states, actions, rewards, next_states, dones = self.replay_memory.sample_batch(config.batch_size)
@@ -202,51 +197,19 @@ class DQN_Agent():
 			# Update current state
 			if done:
 				state = self.env.reset()
-
-				if testFlag:
-					stateT = self.env.reset()
-					episodesT = 0
-					cumulative_rewardT = 0.
-
-					while episodesT < 20:
-
-						# Run the test policy
-						actionT, rewardT, next_stateT, doneT = self.epsilon_greedy_policy(stateT[np.newaxis])
-						cumulative_rewardT += rewardT
-
-						# Update
-						if doneT:
-							stateT = self.env.reset()
-							episodesT += 1
-						else:
-							stateT = next_stateT
-
-					# Print performance
-					testFlag = 0
-					avg_reward = cumulative_rewardT / 20
-					iters.append(i)
-					avg_rewards.append(avg_reward)
-					print('Average reward received: {0}'.format(avg_reward))
-
-				# Start from a random state
-				for k in range(random.randrange(0, config.random_init_steps)):
-					state, _, done, _ = self.env.step(action=random.randrange(0, self.env.action_space.n))
-					if done:
-						state = self.env.reset()
-
 			else:
 				state = next_state
 
 			# Save model
-			if i % (config.max_iterations // 3)  == 0:
+			# For plots
+			if i % 100000  == 0:
 				self.model.save_model_weights(i, model_save_path)
 
-			if i % 10000 == 0:
-				testFlag = 1
+			# For videos
+			if i % (config.max_iterations // 3) == 0:
+				self.model.save_model_weights(i, model_save_path)
 
-		return iters, avg_rewards
-
-	def test(self, model_load_path, ep_count, render):
+	def test(self, model_load_path, ep_count):
 		# Evaluate the performance of your agent over 100 episodes, by calculating cummulative rewards for the 100 episodes.
 		# Here you need to interact with the environment, irrespective of whether you are using a memory.
 		self.model.tf_sess = tf.Session()
@@ -258,10 +221,11 @@ class DQN_Agent():
 		episodes = 0
 		cumulative_reward = 0.
 
+		if config.render:
+			self.env.render()
+
 		while episodes < ep_count:
 
-			if render:
-				self.env.render()
 			# Run the test policy
 			action, reward, next_state, done = self.greedy_policy(state[np.newaxis])
 			cumulative_reward += reward
@@ -278,15 +242,11 @@ class DQN_Agent():
 
 	def burn_in_memory(self, burn_in=10000):
 		# Initialize your replay memory with a burn_in number of episodes / transitions. 
-		state = self.env.reset()
 		for i in range(burn_in):
+			state = self.env.reset()
 			action = random.randrange(0, self.env.env.action_space.n)
 			next_state, reward, done, _ = self.env.step(action)
 			self.replay_memory.append((state, action, reward, next_state, done))
-			if done:
-				state = self.env.reset()
-			else:
-				state = next_state
 
 
 def main():
@@ -297,14 +257,13 @@ def main():
 	# sess = tf.Session(config=config)
 
 	# You want to create an instance of the DQN_Agent class here, and then train / test it.
-	iters=[]
-	avg_rewards=[]
+
 	agent = DQN_Agent(config.env_name)
 	if config.use_replay:
 		agent.burn_in_memory(config.burn_in)
-	iters, avg_rewards = agent.train(config.model_path, False, iters, avg_rewards)
-	agent.test(config.model_path + config.exp_name + '-' + str(config.max_iterations-1), 100, config.render)
-	config.generate_plot(iters, avg_rewards)
+	agent.train(config.model_path)
+	agent.test(config.model_path + config.exp_name + '-' + str(config.max_iterations), 100)
+
 
 if __name__ == '__main__':
 	main()

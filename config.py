@@ -1,5 +1,7 @@
 import tensorflow as tf
 import skimage
+import matplotlib.pyplot as plt
+import pickle
 
 # Plotting the file
 def generate_plot(iters, avg_rewards):
@@ -27,7 +29,7 @@ def conv_layer(name, input, shape, stride, activation=tf.nn.relu):
 	with tf.variable_scope(name):
 		conv_weights = tf.get_variable('kernel', shape=shape, initializer=kernel_initializer)
 		conv_bias = tf.get_variable('bias', shape=[shape[3]], initializer=bias_initializer)
-	return activation(tf.nn.conv2d(input, conv_weights, strides=(1, stride, stride, 1), padding='valid') + conv_bias)
+	return activation(tf.nn.conv2d(input, conv_weights, strides=(1, stride, stride, 1), padding='VALID') + conv_bias)
 
 # Process space invaders frames
 def preprocess(frame):
@@ -45,9 +47,9 @@ def estimate_Q(input, input_size, num_actions, dueling=False):
 
 # Feature extractors
 def fc_extractor(input, input_size):
-	hidden1 = fc_layer('hidden1', input, input_size=input_size, num_units=30)
-	hidden2 = fc_layer('hidden2', hidden1, input_size=30, num_units=30)
-	hidden3 = fc_layer('hidden3', hidden2, input_size=30, num_units=30)
+	hidden1 = fc_layer('hidden1', input, input_size=input_size, num_units=10)
+	hidden2 = fc_layer('hidden2', hidden1, input_size=10, num_units=20)
+	hidden3 = fc_layer('hidden3', hidden2, input_size=20, num_units=30)
 	return hidden3
 
 def conv_extractor(input):
@@ -67,13 +69,13 @@ def extractor(input, input_size, type):
 		return conv_extractor(input), 512
 
 # Experiment name
-exp_name = 'FC-MountainCar'
+exp_name = 'DQN-CartPole'
 
 # Environment
-env_name = "MountainCar-v0"
+env_name = 'CartPole-v0'
 
 # Whether to render
-render = True
+render = False
 
 # Whether to train
 train = True
@@ -82,7 +84,7 @@ train = True
 extractor_type = 'fc'
 
 # Whether to use the experience replay
-use_replay = True
+use_replay = False
 
 # Standard DQN or dueling
 dueling = False
@@ -98,7 +100,7 @@ model_path = 'tmp/'
 max_iterations = 1000000
 
 # Gamma
-discount_factor = 1
+discount_factor = 0.99
 
 # Learning rate
 lr = 0.0001
@@ -118,6 +120,3 @@ replay_memory_size = 50000
 
 # Number of burn in actions
 burn_in = 10000
-
-# Number of random actions to take to initialize state
-random_init_steps = 30
