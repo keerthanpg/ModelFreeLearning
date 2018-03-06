@@ -8,7 +8,7 @@ def generate_plot(iters, avg_rewards):
 	plt.xlabel('iterations')
 	plt.ylabel('Avg Reward')
 	plt.plot(iters, avg_rewards)
-	plt.savefig( config.model_path + config.exp_name +'PerformancePlot'+'.png')
+	plt.savefig(model_path + exp_name +'PerformancePlot'+'.png')
 	f=open('iters.p', 'wb')
 	pickle.dump(iters, f)
 	f=open('avg_rewards.p', 'wb')
@@ -69,7 +69,7 @@ def extractor(input, input_size, type):
 		return conv_extractor(input), 512
 
 # Experiment name
-exp_name = 'DQN-CartPole'
+exp_name = 'DuelDQN-CartPole'
 
 # Environment
 env_name = 'CartPole-v0'
@@ -84,10 +84,10 @@ train = True
 extractor_type = 'fc'
 
 # Whether to use the experience replay
-use_replay = False
+use_replay = True
 
 # Standard DQN or dueling
-dueling = False
+dueling = True
 
 # Weights initializer
 kernel_initializer = tf.contrib.layers.xavier_initializer()

@@ -33,7 +33,7 @@ class QNetwork():
 
 	def save_model_weights(self, step, model_save_path):
 		# Helper function to save your model / weights.
-		self.saver.save(self.tf_sess, global_step=step, save_path=model_save_path + config.exp_name, max_to_keep=config.max_iterations)
+		self.saver.save(self.tf_sess, global_step=step, save_path=model_save_path + config.exp_name)
 		print('Model saved to {0}'.format(model_save_path))
 
 	def load_model_weights(self, model_load_path):
@@ -155,7 +155,7 @@ class DQN_Agent():
 		# If you are using a replay memory, you should interact with environment here, and store these 
 		# transitions to memory, while also updating your model.
 		self.model.tf_sess = tf.Session()
-		self.model.saver = tf.train.Saver()
+		self.model.saver = tf.train.Saver(max_to_keep=config.max_iterations)
 		init = tf.global_variables_initializer()
 
 		if model_load_path is None:
