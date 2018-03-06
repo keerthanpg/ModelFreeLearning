@@ -9,10 +9,12 @@ def generate_plot(iters, avg_rewards):
 	plt.ylabel('Avg Reward')
 	plt.plot(iters, avg_rewards)
 	plt.savefig(model_path + exp_name +'PerformancePlot'+'.png')
-	f=open('iters.p', 'wb')
-	pickle.dump(iters, f)
-	f=open('avg_rewards.p', 'wb')
-	pickle.dump(avg_rewards, f)
+	
+	#f=open('iters.p', 'wb')
+	#pickle.dump(iters, f)
+	#f=open('avg_rewards.p', 'wb')
+	#pickle.dump(avg_rewards, f)
+
 
 # Tensorflow FC layer
 def fc_layer(name, input, input_size, num_units, activation=tf.nn.relu):
@@ -87,7 +89,7 @@ extractor_type = 'fc'
 use_replay = True
 
 # Standard DQN or dueling
-dueling = True
+dueling = False
 
 # Weights initializer
 kernel_initializer = tf.contrib.layers.xavier_initializer()

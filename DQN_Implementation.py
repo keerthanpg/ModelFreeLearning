@@ -240,6 +240,47 @@ class DQN_Agent():
 		# Print performance
 		print('Average reward received: {0}'.format(cumulative_reward/ep_count))
 
+	def calculate_avg_reward(self):
+		# Evaluate the performance of your agent over 100 episodes, by calculating cummulative rewards for the 100 episodes.
+		# Here you need to interact with the environment, irrespective of whether you are using a memory.
+		iter=[]
+		avg_rewards=[]
+		i=0
+		while (i < config.max_iterations):
+			self.model.tf_sess = tf.Session()
+			self.model.saver = tf.train.Saver()
+			self.model.load_model_weights(config.model_path + config.exp_name + '-' + str(i))
+
+			# Initialize
+			state = self.env.reset()
+			episodes = 0
+			cumulative_reward = 0.
+			ep_count=20
+
+			if config.render:
+				self.env.render()
+
+			while episodes < ep_count:
+
+				# Run the test policy
+				#action, reward, next_state, done = self.epsilon_greedy_policy(state[np.newaxis], test_mode=True)
+				action, reward, next_state, done = self.greedy_policy(state[np.newaxis])
+				cumulative_reward += reward
+
+				# Update
+				if done:
+					state = self.env.reset()
+					episodes += 1
+				else:
+					state = next_state
+			avg_reward=cumulative_reward/ep_count
+			# Print performance
+			print('Average reward received: {0}'.format(cumulative_reward/ep_count))
+			iter.append(i)
+			avg_rewards.append(avg_reward)
+			i = i+100000
+		return(iter, avg_rewards)
+
 	def burn_in_memory(self, burn_in=10000):
 		# Initialize your replay memory with a burn_in number of episodes / transitions. 
 		for i in range(burn_in):
@@ -259,10 +300,12 @@ def main():
 	# You want to create an instance of the DQN_Agent class here, and then train / test it.
 
 	agent = DQN_Agent(config.env_name)
-	if config.use_replay:
-		agent.burn_in_memory(config.burn_in)
-	agent.train(config.model_path)
-	agent.test(config.model_path + config.exp_name + '-' + str(config.max_iterations), 100)
+	#if config.use_replay:
+		#agent.burn_in_memory(config.burn_in)
+	#agent.train(config.model_path)
+	#agent.test(config.model_path + config.exp_name + '-' + str(config.max_iterations), 100)
+	iters,avg_rewards=agent.calculate_avg_reward()
+	config.generate_plot(iters,avg_rewards)
 
 
 if __name__ == '__main__':
