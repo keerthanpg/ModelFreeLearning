@@ -10,12 +10,6 @@ def generate_plot(iters, avg_rewards):
 	plt.plot(iters, avg_rewards)
 	plt.savefig(model_path + exp_name +'PerformancePlot'+'.png')
 	
-	#f=open('iters.p', 'wb')
-	#pickle.dump(iters, f)
-	#f=open('avg_rewards.p', 'wb')
-	#pickle.dump(avg_rewards, f)
-
-
 # Tensorflow FC layer
 def fc_layer(name, input, input_size, num_units, activation=tf.nn.relu):
 	with tf.variable_scope(name):
@@ -49,10 +43,9 @@ def estimate_Q(input, input_size, num_actions, dueling=False):
 
 # Feature extractors
 def fc_extractor(input, input_size):
-	hidden1 = fc_layer('hidden1', input, input_size=input_size, num_units=10)
-	hidden2 = fc_layer('hidden2', hidden1, input_size=10, num_units=20)
-	hidden3 = fc_layer('hidden3', hidden2, input_size=20, num_units=30)
-	return hidden3
+	hidden1 = fc_layer('hidden1', input, input_size=input_size, num_units=32)
+	hidden2 = fc_layer('hidden2', hidden1, input_size=32, num_units=32)
+	return hidden2
 
 def conv_extractor(input):
 	conv1 = conv_layer('conv1', input, shape=[8, 8, 4, 32], stride=4)
@@ -66,18 +59,18 @@ def extractor(input, input_size, type):
 	if type=='linear':
 		return input, input_size
 	elif type=='fc':
-		return fc_extractor(input, input_size), 30
+		return fc_extractor(input, input_size), 32
 	else:
 		return conv_extractor(input), 512
 
 # Experiment name
-exp_name = 'DuelDQN-CartPole'
+exp_name = 'DuelDQN-MountainCar'
 
 # Environment
-env_name = 'CartPole-v0'
+env_name = 'MountainCar-v0'
 
 # Whether to render
-render = False
+render = True
 
 # Whether to train
 train = True
@@ -89,7 +82,7 @@ extractor_type = 'fc'
 use_replay = True
 
 # Standard DQN or dueling
-dueling = False
+dueling = True
 
 # Weights initializer
 kernel_initializer = tf.contrib.layers.xavier_initializer()
@@ -102,16 +95,16 @@ model_path = 'tmp/'
 max_iterations = 1000000
 
 # Gamma
-discount_factor = 0.99
+discount_factor = 1
 
 # Learning rate
-lr = 0.0001
+lr = 0.005
 
 # Epsilon greedy exploration
-initial_exploration = 0.5
-final_exploration = 0.05
-final_exploration_frame = max_iterations
-exploration_change_rate = (final_exploration - initial_exploration)/final_exploration_frame
+initial_exploration = 1.
+final_exploration = 0.1
+final_exploration_frame = max_iterations/5
+exploration_change_rate = (final_exploration / initial_exploration)**(1/final_exploration_frame)
 test_exploration = 0.05
 
 # Batch size
@@ -121,4 +114,4 @@ batch_size = 32
 replay_memory_size = 50000
 
 # Number of burn in actions
-burn_in = 10000
+burn_in = 500

@@ -17,7 +17,10 @@ class QNetwork():
 		num_actions = env.action_space.n
 
 		# Model
-		self.states = tf.placeholder(name='states', shape=(None, num_observations), dtype=tf.float32)
+		if config.extractor_type == 'conv':
+			self.states = tf.placeholder(name='states', shape=(None, 84, 84, 4), dtype=tf.float32)
+		else:
+			self.states = tf.placeholder(name='states', shape=(None, num_observations), dtype=tf.float32)
 		self.features, feat_length = config.extractor(self.states, num_observations, config.extractor_type)
 		self.Q = config.estimate_Q(self.features, input_size=feat_length, num_actions=num_actions, dueling=config.dueling)
 
@@ -55,8 +58,8 @@ class Replay_Memory():
 		# A simple (if not the most efficient) was to implement the memory is as a list of transitions.
 		self.memory_size = memory_size
 		if config.extractor_type == 'conv':
-			self.states = np.empty((self.memory_size, 84, 84, 4), dtype=np.float32)
-			self.next_states = np.empty((self.memory_size, 84, 84, 4), dtype=np.float32)
+			self.states = np.empty((self.memory_size, 84, 84, 4), dtype=np.uint8)
+			self.next_states = np.empty((self.memory_size, 84, 84, 4), dtype=np.uint8)
 		else:
 			self.states = np.empty((self.memory_size, state_size), dtype=np.float32)
 			self.next_states = np.empty((self.memory_size, state_size), dtype=np.float32)
@@ -83,7 +86,7 @@ class Replay_Memory():
 		next_states = self.next_states[batch]
 		dones = self.dones[batch]
 
-		return states, actions, rewards, next_states, dones.astype(int)
+		return states.astype(np.float32), actions, rewards, next_states.astype(np.float32), dones.astype(int)
 
 	def append(self, transition):
 		# Appends transition to the memory.
@@ -116,9 +119,16 @@ class DQN_Agent():
 		self.env = gym.make(environment_name)
 		self.replay_memory = Replay_Memory(self.env.observation_space.shape[0])
 		self.model = QNetwork(self.env)
+		self.action_buffer = np.empty((84, 84, 5), dtype=np.float32)
 
 	def epsilon_greedy_policy(self, state, i=0, test_mode=False):
 		# Creating epsilon greedy probabilities to sample from.
+		if config.extractor_type == 'conv':
+			self.action_buffer[:, :, 1:5] = self.action_buffer[:, :, 0:4]
+			self.action_buffer[:, :, 0] = state
+			state = self.action_buffer[:, :, 0:4]
+			state = state[np.newaxis]
+
 		Q = self.model.tf_sess.run(self.model.Q, feed_dict={self.model.states: state})
 
 		# Set epsilon
@@ -128,7 +138,7 @@ class DQN_Agent():
 			if i >= config.final_exploration_frame:
 				exploration_prob = config.final_exploration
 			else:
-				exploration_prob = config.initial_exploration + i * config.exploration_change_rate
+				exploration_prob = config.initial_exploration * (config.exploration_change_rate)** i
 
 		# Choose an action
 		if random.random() < exploration_prob:
@@ -137,14 +147,40 @@ class DQN_Agent():
 			action = np.argmax(Q)
 
 		next_state, reward, done, _ = self.env.step(action)
+
+		if config.extractor_type == 'conv':
+			self.action_buffer[:, :, 1:5] = self.action_buffer[:, :, 0:4]
+			self.action_buffer[:, :, 0] = config.preprocess(next_state)
+			next_state = self.action_buffer[:, :, 0:4]
+			next_state = next_state[np.newaxis]
+			self.action_buffer[:, :, 0:4] = self.action_buffer[:, :, 1:5]
+			if done:
+				self.action_buffer = np.empty((84, 84, 5), dtype=np.float32)
+
 		self.replay_memory.append((state, action, reward, next_state, done))
 		return action, reward, next_state, done
 
 	def greedy_policy(self, state):
 		# Creating greedy policy for test time.
+		if config.extractor_type == 'conv':
+			self.action_buffer[:, :, 1:5] = self.action_buffer[:, :, 0:4]
+			self.action_buffer[:, :, 0] = state
+			state = self.action_buffer[:, :, 0:4]
+			state = state[np.newaxis]
+
 		Q = self.model.tf_sess.run(self.model.Q, feed_dict={self.model.states: state})
 		action = np.argmax(Q)
 		next_state, reward, done, _ = self.env.step(action)
+
+		if config.extractor_type == 'conv':
+			self.action_buffer[:, :, 1:5] = self.action_buffer[:, :, 0:4]
+			self.action_buffer[:, :, 0] = config.preprocess(next_state)
+			next_state = self.action_buffer[:, :, 0:4]
+			next_state = next_state[np.newaxis]
+			self.action_buffer[:, :, 0:4] = self.action_buffer[:, :, 1:5]
+			if done:
+				self.action_buffer = np.empty((84, 84, 5), dtype=np.float32)
+
 		return action, reward, next_state, done
 
 	def train(self, model_save_path, model_load_path=None):
@@ -164,17 +200,24 @@ class DQN_Agent():
 			self.model.load_model_weights(model_load_path)
 
 		# Get the initial state
-		state = self.env.reset()
+		if config.extractor_type == 'conv':
+			state = config.preprocess(self.env.reset())
+		else:
+			state = self.env.reset()
 
 		for i in range(config.max_iterations+1):
 
 			# Print progress
 			if i % 1000 == 0:
-				print('{0}/{1}'.format(i, config.max_iterations))
+				print('Iteration: {0}/{1}'.format(i, config.max_iterations))
+				print((np.maximum((config.initial_exploration * (config.exploration_change_rate) ** i),config.final_exploration)))
 
 
 			# Take an epsilon-greedy step
 			action, reward, next_state, done = self.epsilon_greedy_policy(state[np.newaxis], i)
+
+			if config.render:
+				self.env.render()
 
 			if config.use_replay:
 				states, actions, rewards, next_states, dones = self.replay_memory.sample_batch(config.batch_size)
@@ -195,10 +238,16 @@ class DQN_Agent():
 			_, loss = self.model.tf_sess.run([self.model.optim, self.model.loss],feed_dict = {self.model.actions: actions, self.model.states: states, self.model.Q_target: Q_target})
 
 			# Update current state
-			if done:
-				state = self.env.reset()
+			if config.extractor_type == 'conv':
+				if done:
+					state = config.preprocess(self.env.reset())
+				else:
+					state = next_state[0, :, :, 0]
 			else:
-				state = next_state
+				if done:
+					state = self.env.reset()
+				else:
+					state = next_state
 
 			# Save model
 			# For plots
@@ -217,7 +266,10 @@ class DQN_Agent():
 		self.model.load_model_weights(model_load_path)
 
 		# Initialize
-		state = self.env.reset()
+		if config.extractor_type == 'conv':
+			state = config.preprocess(self.env.reset())
+		else:
+			state = self.env.reset()
 		episodes = 0
 		cumulative_reward = 0.
 
@@ -231,11 +283,18 @@ class DQN_Agent():
 			cumulative_reward += reward
 
 			# Update
-			if done:
-				state = self.env.reset()
-				episodes += 1
+			if config.extractor_type == 'conv':
+				if done:
+					state = config.preprocess(self.env.reset())
+					episodes += 1
+				else:
+					state = next_state[0, :, :, 0]
 			else:
-				state = next_state
+				if done:
+					state = self.env.reset()
+					episodes += 1
+				else:
+					state = next_state
 
 		# Print performance
 		print('Average reward received: {0}'.format(cumulative_reward/ep_count))
@@ -252,7 +311,10 @@ class DQN_Agent():
 			self.model.load_model_weights(config.model_path + config.exp_name + '-' + str(i))
 
 			# Initialize
-			state = self.env.reset()
+			if config.extractor_type == 'conv':
+				state = config.preprocess(self.env.reset())
+			else:
+				state = self.env.reset()
 			episodes = 0
 			cumulative_reward = 0.
 			ep_count=20
@@ -268,12 +330,21 @@ class DQN_Agent():
 				cumulative_reward += reward
 
 				# Update
-				if done:
-					state = self.env.reset()
-					episodes += 1
+				if config.extractor_type == 'conv':
+					if done:
+						state = config.preprocess(self.env.reset())
+						episodes += 1
+					else:
+						state = next_state[0, :, :, 0]
 				else:
-					state = next_state
+					if done:
+						state = self.env.reset()
+						episodes += 1
+					else:
+						state = next_state
+
 			avg_reward=cumulative_reward/ep_count
+
 			# Print performance
 			print('Average reward received: {0}'.format(cumulative_reward/ep_count))
 			iter.append(i)
@@ -284,9 +355,25 @@ class DQN_Agent():
 	def burn_in_memory(self, burn_in=10000):
 		# Initialize your replay memory with a burn_in number of episodes / transitions. 
 		for i in range(burn_in):
-			state = self.env.reset()
+			if config.extractor_type == 'conv':
+				state = config.preprocess(self.env.reset())
+				self.action_buffer[:, :, 1:5] = self.action_buffer[:, :, 0:4]
+				self.action_buffer[:, :, 0] = state
+				state = self.action_buffer[:, :, 0:4]
+				state = state[np.newaxis]
+			else:
+				state = self.env.reset()
+
 			action = random.randrange(0, self.env.env.action_space.n)
 			next_state, reward, done, _ = self.env.step(action)
+
+			if config.extractor_type == 'conv':
+				self.action_buffer[:, :, 1:5] = self.action_buffer[:, :, 0:4]
+				self.action_buffer[:, :, 0] = config.preprocess(next_state)
+				next_state = self.action_buffer[:, :, 0:4]
+				next_state = next_state[np.newaxis]
+				self.action_buffer = np.empty((84, 84, 5), dtype=np.float32)
+
 			self.replay_memory.append((state, action, reward, next_state, done))
 
 
@@ -300,10 +387,10 @@ def main():
 	# You want to create an instance of the DQN_Agent class here, and then train / test it.
 
 	agent = DQN_Agent(config.env_name)
-	#if config.use_replay:
-		#agent.burn_in_memory(config.burn_in)
-	#agent.train(config.model_path)
-	#agent.test(config.model_path + config.exp_name + '-' + str(config.max_iterations), 100)
+	if config.use_replay:
+		agent.burn_in_memory(config.burn_in)
+	agent.train(config.model_path)
+	agent.test(config.model_path + config.exp_name + '-' + str(config.max_iterations), 100)
 	iters,avg_rewards=agent.calculate_avg_reward()
 	config.generate_plot(iters,avg_rewards)
 
