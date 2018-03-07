@@ -1,5 +1,5 @@
 import tensorflow as tf
-import skimage
+import skimage.color, skimage.transform
 import matplotlib.pyplot as plt
 import pickle
 
@@ -103,9 +103,9 @@ lr = 0.005
 # Epsilon greedy exploration
 initial_exploration = 1.
 final_exploration = 0.1
-final_exploration_frame = max_iterations/5
+final_exploration_frame = max_iterations/7
 exploration_change_rate = (final_exploration / initial_exploration)**(1/final_exploration_frame)
-test_exploration = 0.05
+test_exploration = 0.1
 
 # Batch size
 batch_size = 32

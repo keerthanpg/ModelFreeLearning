@@ -32,7 +32,7 @@ class QNetwork():
 		self.loss = tf.reduce_mean((self.Q_target - self.Q_pred)**2)
 
 		# Optimizer
-		self.optim = tf.train.RMSPropOptimizer(learning_rate=config.lr).minimize(self.loss)
+		self.optim = tf.train.AdamOptimizer(learning_rate=config.lr).minimize(self.loss)
 
 	def save_model_weights(self, step, model_save_path):
 		# Helper function to save your model / weights.
