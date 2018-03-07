@@ -43,8 +43,8 @@ def estimate_Q(input, input_size, num_actions, dueling=False):
 
 # Feature extractors
 def fc_extractor(input, input_size):
-	hidden1 = fc_layer('hidden1', input, input_size=input_size, num_units=32)
-	hidden2 = fc_layer('hidden2', hidden1, input_size=32, num_units=32)
+	hidden1 = fc_layer('hidden1', input, input_size=input_size, num_units=30)
+	hidden2 = fc_layer('hidden2', hidden1, input_size=30, num_units=30)
 	return hidden2
 
 def conv_extractor(input):
@@ -59,7 +59,7 @@ def extractor(input, input_size, type):
 	if type=='linear':
 		return input, input_size
 	elif type=='fc':
-		return fc_extractor(input, input_size), 32
+		return fc_extractor(input, input_size), 30
 	else:
 		return conv_extractor(input), 512
 
@@ -98,14 +98,14 @@ max_iterations = 1000000
 discount_factor = 1
 
 # Learning rate
-lr = 0.001
+lr = 0.005
 
 # Epsilon greedy exploration
-initial_exploration = 0.5
-final_exploration = 0.05
-final_exploration_frame = max_iterations/5
+initial_exploration = 1.
+final_exploration = 0.1
+final_exploration_frame = max_iterations/7
 exploration_change_rate = (final_exploration / initial_exploration)**(1/final_exploration_frame)
-test_exploration = 0.05
+test_exploration = 0.1
 
 # Batch size
 batch_size = 32

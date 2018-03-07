@@ -208,14 +208,14 @@ class DQN_Agent():
 		for i in range(config.max_iterations+1):
 
 			# Print progress
-			if i % 1000 == 0:
+			if i % 10000 == 0:
 				print('Iteration: {0}/{1}'.format(i, config.max_iterations))
 				print('Epsilon: {0}'.format(np.maximum((config.initial_exploration * (config.exploration_change_rate) ** i),config.final_exploration)))
 
 			# Take an epsilon-greedy step
 			action, reward, next_state, done = self.epsilon_greedy_policy(state[np.newaxis], i)
 			if reward > -1 and done:
-				print('Reached Goal!\n')
+				print('Reached Goal!')
 
 			if config.render:
 				self.env.render()
