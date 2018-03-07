@@ -70,7 +70,7 @@ exp_name = 'DuelDQN-MountainCar'
 env_name = 'MountainCar-v0'
 
 # Whether to render
-render = True
+render = False
 
 # Whether to train
 train = True
@@ -98,14 +98,14 @@ max_iterations = 1000000
 discount_factor = 1
 
 # Learning rate
-lr = 0.005
+lr = 0.001
 
 # Epsilon greedy exploration
-initial_exploration = 1.
-final_exploration = 0.1
-final_exploration_frame = max_iterations/7
+initial_exploration = 0.5
+final_exploration = 0.05
+final_exploration_frame = max_iterations/5
 exploration_change_rate = (final_exploration / initial_exploration)**(1/final_exploration_frame)
-test_exploration = 0.1
+test_exploration = 0.05
 
 # Batch size
 batch_size = 32
