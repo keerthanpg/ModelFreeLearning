@@ -325,14 +325,7 @@ class DQN_Agent():
         episodes = 0
         cumulative_reward = 0.
 
-<<<<<<< HEAD
-=======
-        
-
->>>>>>> b5995fa63d4170add3ac306a1bcd4d62eda91d88
         while episodes < ep_count:
-            if config.render:
-                self.env.render()
 
             # Run the test policy
             action, reward, next_state, done = self.greedy_policy(state[np.newaxis])
