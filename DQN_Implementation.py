@@ -274,6 +274,7 @@ class DQN_Agent():
         self.model.tf_sess = tf.Session()
         self.model.saver = tf.train.Saver()
         self.model.load_model_weights(model_load_path)
+        self.env = gym.wrappers.Monitor(self.env, 'Videos/'+ config.exp_name + '_'+str(step), force=True, video_callable=lambda episode_id: True )
 
         # Initialize
         if config.extractor_type == 'conv':
@@ -283,10 +284,11 @@ class DQN_Agent():
         episodes = 0
         cumulative_reward = 0.
 
-        if config.render:
-            self.env.render()
+        
 
         while episodes < ep_count:
+            if config.render:
+                self.env.render()
 
             # Run the test policy
             action, reward, next_state, done = self.greedy_policy(state[np.newaxis])
