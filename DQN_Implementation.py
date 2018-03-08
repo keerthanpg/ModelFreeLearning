@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 import tensorflow as tf, numpy as np, gym, sys, copy, random
 import config
+import matplotlib.pyplot as plt
 
 
 class QNetwork():
@@ -21,10 +22,17 @@ class QNetwork():
             self.states = tf.placeholder(name='states', shape=(None, 84, 84, 4), dtype=tf.float32)
         else:
             self.states = tf.placeholder(name='states', shape=(None, num_observations), dtype=tf.float32)
-        self.features, feat_length = config.extractor(self.states, num_observations, config.extractor_type)
-        self.Q = config.estimate_Q(self.features, input_size=feat_length, num_actions=num_actions,
-                                   dueling=config.dueling)
 
+        with tf.variable_scope('main'):
+            self.features, feat_length = config.extractor(self.states, num_observations, config.extractor_type)
+            self.Q = config.estimate_Q(self.features, input_size=feat_length, num_actions=num_actions,
+                                       dueling=config.dueling)
+
+        if config.double:
+            with tf.variable_scope('target'):
+                self.tar_features, feat_length = config.extractor(self.states, num_observations, config.extractor_type)
+                self.tar_Q = config.estimate_Q(self.tar_features, input_size=feat_length, num_actions=num_actions,
+                                           dueling=config.dueling)
         # Loss
         self.Q_target = tf.placeholder(name='Q_target', shape=(None,), dtype=tf.float32)
         self.actions = tf.placeholder(name='actions', shape=(None,), dtype=tf.int32)
@@ -34,6 +42,16 @@ class QNetwork():
 
         # Optimizer
         self.optim = tf.train.AdamOptimizer(learning_rate=config.lr).minimize(self.loss)
+
+    def update_target(self):
+        # Get trainable variables
+        trainable_variables = tf.trainable_variables()
+        # Main net variables
+        trainable_variables_main = [var for var in trainable_variables if var.name.startswith('main')]
+        # Target net variables
+        trainable_variables_target = [var for var in trainable_variables if var.name.startswith('target')]
+        for i in range(len(trainable_variables_main)):
+            self.tf_sess.run(tf.assign(trainable_variables_target[i], trainable_variables_main[i]))
 
     def save_model_weights(self, step, model_save_path):
         # Helper function to save your model / weights.
@@ -49,7 +67,7 @@ class QNetwork():
 
 class Replay_Memory():
 
-    def __init__(self, state_size, memory_size=50000):
+    def __init__(self, state_size, memory_size=config.replay_memory_size):
 
         # The memory essentially stores transitions recorder from the agent
         # taking actions in the environment.
@@ -136,7 +154,7 @@ class DQN_Agent():
         if i >= config.final_exploration_frame:
             exploration_prob = config.final_exploration
         else:
-            exploration_prob = config.initial_exploration * (config.exploration_change_rate) ** i
+            exploration_prob = config.initial_exploration + (config.exploration_change_rate) * i
 
         # Choose an action
         if random.random() < exploration_prob:
@@ -208,19 +226,26 @@ class DQN_Agent():
         else:
             state = self.env.reset()
 
+        reachCount = 0
+        episode_count = 0
+        iter = []
+        avg_rewards = []
         for i in range(config.max_iterations + 1):
 
             # Print progress
             if i % 10000 == 0:
                 print('Iteration: {0}/{1}'.format(i, config.max_iterations))
-                print('Epsilon: {0}'.format(np.maximum((config.initial_exploration * (config.exploration_change_rate) ** i), config.final_exploration)))
+                print('Epsilon: {0}'.format(np.maximum((config.initial_exploration + (config.exploration_change_rate) * i), config.final_exploration)))
 
             # Take an epsilon-greedy step
             action, reward, next_state, done = self.epsilon_greedy_policy(state[np.newaxis], i)
-            if config.env_name == 'MountainCar-v0':
-                if done:
+
+            if done:
+                episode_count += 1
+                if config.env_name == 'MountainCar-v0':
                     if next_state[0] >= 0.5:
-                        print('Reached Goal!')
+                        reachCount += 1
+                        print(reachCount)
                     else:
                         done = not(done)
 
@@ -238,7 +263,11 @@ class DQN_Agent():
                 dones = int(done)
 
             # Generate targets for the batch
-            Q_next_state = self.model.tf_sess.run(self.model.Q, feed_dict={self.model.states: next_states})
+            if config.double:
+                Q_next_state = self.model.tf_sess.run(self.model.tar_Q, feed_dict={self.model.states: next_states})
+            else:
+                Q_next_state = self.model.tf_sess.run(self.model.Q, feed_dict={self.model.states: next_states})
+
             max_Q_next_state = np.max(Q_next_state, axis=1)
             Q_target = rewards + max_Q_next_state * config.discount_factor * (1. - dones)
 
@@ -261,16 +290,28 @@ class DQN_Agent():
 
             # Save model
             # For plots
-            if i % 10000 == 0:
+            if i != 0 and i % 10000 == 0:
+                if config.double:
+                    self.model.update_target()
                 self.model.save_model_weights(i, model_save_path)
+                iter.append(i)
+                avg_reward = 10000./episode_count
+                if config.env_name == 'MountainCar-v0':
+                    avg_reward -= 200
+                avg_rewards.append(avg_reward)
+                episode_count = 0
 
             # For videos
             if i % (config.max_iterations // 3) == 0:
                 self.model.save_model_weights(i, model_save_path)
 
-    def test(self, model_load_path, ep_count):
-        # Evaluate the performance of your agent over 100 episodes, by calculating cummulative rewards for the 100 episodes.
-        # Here you need to interact with the environment, irrespective of whether you are using a memory.
+        plt.xlabel('iterations')
+        plt.ylabel('Approximate reward per episode (train)')
+        plt.plot(iter, avg_rewards, 'orange')
+        plt.savefig(config.model_path + config.exp_name + 'TrainPlot' + '.png')
+
+    def test_stats(self, model_load_path, ep_count):
+        # Evaluates the performance of the agent over 100 episodes, by calculating cummulative rewards for the 100 episodes.
         self.model.tf_sess = tf.Session()
         self.model.saver = tf.train.Saver()
         self.model.load_model_weights(model_load_path)
@@ -283,14 +324,14 @@ class DQN_Agent():
         episodes = 0
         cumulative_reward = 0.
 
-        if config.render:
-            self.env.render()
-
         while episodes < ep_count:
 
             # Run the test policy
             action, reward, next_state, done = self.greedy_policy(state[np.newaxis])
             cumulative_reward += reward
+
+            if config.render:
+                self.env.render()
 
             # Update
             if config.extractor_type == 'conv':
@@ -309,7 +350,7 @@ class DQN_Agent():
         # Print performance
         print('Average reward received: {0}'.format(cumulative_reward / ep_count))
 
-    def calculate_avg_reward(self):
+    def test_plots(self):
         # Evaluate the performance of your agent over 100 episodes, by calculating cummulative rewards for the 100 episodes.
         # Here you need to interact with the environment, irrespective of whether you are using a memory.
         iter = []
@@ -329,15 +370,14 @@ class DQN_Agent():
             cumulative_reward = 0.
             ep_count = 20
 
-            if config.render:
-                self.env.render()
-
             while episodes < ep_count:
 
                 # Run the test policy
-                # action, reward, next_state, done = self.epsilon_greedy_policy(state[np.newaxis], test_mode=True)
                 action, reward, next_state, done = self.greedy_policy(state[np.newaxis])
                 cumulative_reward += reward
+
+                if config.render:
+                    self.env.render()
 
                 # Update
                 if config.extractor_type == 'conv':
@@ -360,11 +400,17 @@ class DQN_Agent():
             iter.append(i)
             avg_rewards.append(avg_reward)
             i = i + 10000
-        return (iter, avg_rewards)
+
+        plt.figure()
+        plt.xlabel('iterations')
+        plt.ylabel('Average reward per episode (test)')
+        plt.plot(iter, avg_rewards)
+        plt.savefig(config.model_path + config.exp_name + 'PerformancePlot' + '.png')
 
     def burn_in_memory(self, burn_in=10000):
-        # Initialize your replay memory with a burn_in number of episodes / transitions.
+        # Initialize replay memory with a burn_in number of transitions.
         for i in range(burn_in):
+            # Get a starting state
             if config.extractor_type == 'conv':
                 state = config.preprocess(self.env.reset())
                 self.action_buffer[:, :, 1:5] = self.action_buffer[:, :, 0:4]
@@ -374,34 +420,37 @@ class DQN_Agent():
             else:
                 state = self.env.reset()
 
+            # Take a random action
             action = random.randrange(0, self.env.env.action_space.n)
             next_state, reward, done, _ = self.env.step(action)
 
+            # Add it to the replay memory
             if config.extractor_type == 'conv':
                 self.action_buffer[:, :, 1:5] = self.action_buffer[:, :, 0:4]
                 self.action_buffer[:, :, 0] = config.preprocess(next_state)
                 next_state = self.action_buffer[:, :, 0:4]
                 next_state = next_state[np.newaxis]
                 self.action_buffer = np.empty((84, 84, 5), dtype=np.float32)
-
             self.replay_memory.append((state, action, reward, next_state, done))
 
 
 def main():
-    # Setting the session to allow growth, so it doesn't allocate all GPU memory.
-    # gpu_ops = tf.GPUOptions(allow_growth=True)
-    # config = tf.ConfigProto(gpu_options=gpu_ops)
-    # sess = tf.Session(config=config)
-
-    # You want to create an instance of the DQN_Agent class here, and then train / test it.
-
+    # Create an instance of the DQN_Agent class
     agent = DQN_Agent(config.env_name)
-    if config.use_replay:
-        agent.burn_in_memory(config.burn_in)
-    agent.train(config.model_path)
-    iters, avg_rewards = agent.calculate_avg_reward()
-    config.generate_plot(iters, avg_rewards)
-    #agent.test(config.model_path + config.exp_name + '-' + str(config.max_iterations), 100)
+
+    if config.train:
+        # Burn in the replay buffer
+        if config.use_replay:
+            agent.burn_in_memory(config.burn_in)
+        # Train
+        agent.train(config.model_path)
+
+    # Generate test plots (average rewards over 20 episodes)
+    agent.test_plots()
+
+    # Generate test statistics (average over 100 episodes)
+    agent.test_stats(config.model_path + config.exp_name + '-' + str(config.max_iterations), 100)
+
 
 if __name__ == '__main__':
     main()
