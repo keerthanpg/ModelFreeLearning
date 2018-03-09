@@ -305,12 +305,16 @@ class DQN_Agent():
         plt.plot(iter, avg_rewards, 'orange')
         plt.savefig(config.model_path + config.exp_name + 'TrainPlot' + '.png')
 
-    def test_stats(self, model_load_path, ep_count):
-        # Evaluates the performance of a loaded model over 100 episodes by calculating cumulative rewards.
+    def test_stats(self, model_load_path, ep_count, step):
+        # Evaluates the performance of a loaded model over 100 episodes by calculating cumulative rewards and standard means.
+        #the step argument gives which model to load
         self.model.tf_sess = tf.Session()
         self.model.saver = tf.train.Saver()
         self.model.load_model_weights(model_load_path)
-
+        if config.capture_videos:
+                self.env = gym.wrappers.Monitor(self.env, config.model_path +'Videos/' + config.exp_name + '_' + str(step), force=True,video_callable=lambda episode_id: True)
+                
+        rewards=[]
         # Initialize
         if config.extractor_type == 'conv':
             state = config.preprocess(self.env.reset())
@@ -318,6 +322,7 @@ class DQN_Agent():
             state = self.env.reset()
         episodes = 0
         cumulative_reward = 0.
+        episodic_reward=0.
 
         while episodes < ep_count:
 
@@ -333,6 +338,8 @@ class DQN_Agent():
                 if done:
                     state = config.preprocess(self.env.reset())
                     episodes += 1
+                    rewards.append(episodic_reward)
+                    episodic_reward=0.
                 else:
                     state = next_state[0, :, :, 0]
             else:
@@ -343,7 +350,8 @@ class DQN_Agent():
                     state = next_state
 
         # Print performance
-        print('Average reward received: {0}'.format(cumulative_reward / ep_count))
+        print('Average reward received: {0}'.format(np.mean(rewards)))
+        print('Standard deviation: {0}'.format(np.std(rewards)))
 
     def test_plots(self):
         # Load the models saved during training and evaluate them on 20 episodes each
@@ -357,7 +365,7 @@ class DQN_Agent():
             self.model.load_model_weights(config.model_path + config.exp_name + '-' + str(i))
 
             if config.capture_videos:
-                self.env = gym.wrappers.Monitor(self.env, config.model_path +'/Videos/' + config.exp_name + '_' + str(i), force=True,video_callable=lambda episode_id: True)
+                self.env = gym.wrappers.Monitor(self.env, config.model_path +'Videos/' + config.exp_name, force=True,video_callable=lambda episode_id: True)
 
             # Initialize
             if config.extractor_type == 'conv':
@@ -366,7 +374,7 @@ class DQN_Agent():
                 state = self.env.reset()
             episodes = 0
             cumulative_reward = 0.
-            ep_count = 20
+            ep_count = 20            
 
             while episodes < ep_count:
 
@@ -436,7 +444,7 @@ class DQN_Agent():
 def main():
     # Create an instance of the DQN_Agent class
     agent = DQN_Agent(config.env_name)
-
+    '''
     if config.train:
         # Burn in the replay buffer
         if config.use_replay:
@@ -445,10 +453,11 @@ def main():
         agent.train(config.model_path)
 
     # Generate test plots (average rewards over 20 episodes)
-    agent.test_plots()
+    agent.test_plots()'''
 
     # Generate test statistics (average over 100 episodes)
-    agent.test_stats(config.model_path + config.exp_name + '-' + str(config.max_iterations), 100)
+    step=int(input("Enter iteration step"))
+    agent.test_stats(config.model_path + config.exp_name + '-' + str(step), 100, step)    
 
 
 if __name__ == '__main__':

@@ -56,7 +56,7 @@ test_exploration = 0.1
 batch_size = 32
 
 # Experience replay memory size
-replay_memory_size = 500000
+replay_memory_size = 50000
 
 # Number of burn in actions
 burn_in = 10000
