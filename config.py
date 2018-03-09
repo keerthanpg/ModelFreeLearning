@@ -11,6 +11,9 @@ env_name = 'SpaceInvaders-v0'
 # Whether to render
 render = False
 
+# Whether to save videos
+capture_videos = False
+
 # Whether to train
 train = True
 
@@ -34,18 +37,18 @@ bias_initializer = tf.constant_initializer(0.0)
 model_path = 'tmp/'
 
 # Maximum iterations for training
-max_iterations = 2000000
+max_iterations = 1000000
 
 # Gamma
 discount_factor = 0.99
 
 # Learning rate
-lr = 0.001
+lr = 0.0001
 
 # Epsilon greedy exploration
 initial_exploration = 1.
 final_exploration = 0.1
-final_exploration_frame = max_iterations / 2
+final_exploration_frame = max_iterations
 exploration_change_rate = (final_exploration - initial_exploration) * (1. / final_exploration_frame)
 test_exploration = 0.1
 
@@ -81,16 +84,17 @@ def conv_layer(name, input, shape, stride, activation=tf.nn.relu):
 # Feature extractors
 # 'fc' for DQNs
 def fc_extractor(input, input_size):
-    hidden1 = fc_layer('hidden1', input, input_size=input_size, num_units=32)
-    hidden2 = fc_layer('hidden2', hidden1, input_size=32, num_units=32)
-    return hidden2
+    hidden1 = fc_layer('hidden1', input, input_size=input_size, num_units=30)
+    hidden2 = fc_layer('hidden2', hidden1, input_size=30, num_units=30)
+    hidden3 = fc_layer('hidden3', hidden2, input_size=30, num_units=30)
+    return hidden3
 
 # 'conv' for Space Invaders
 def conv_extractor(input):
     normalize = (input - (255.0 / 2)) / (255.0 / 2)
-    conv1 = conv_layer('conv1', normalize, shape=[8, 8, 4, 32], stride=4)
-    conv2 = conv_layer('conv2', conv1, shape=[4, 4, 32, 64], stride=2)
-    conv3 = conv_layer('conv3', conv2, shape=[3, 3, 64, 64], stride=1)
+    conv1 = conv_layer('conv1', normalize, shape=[8, 8, 4, 16], stride=4)
+    conv2 = conv_layer('conv2', conv1, shape=[4, 4, 16, 32], stride=2)
+    conv3 = conv_layer('conv3', conv2, shape=[3, 3, 32, 64], stride=1)
     flatten = tf.reshape(conv3, (-1, 7 * 7 * 64))
     fc = fc_layer('fc', flatten, input_size=7 * 7 * 64, num_units=512)
     return fc
@@ -100,7 +104,7 @@ def extractor(input, input_size, type):
     if type == 'linear':
         return input, input_size
     elif type == 'fc':
-        return fc_extractor(input, input_size), 32
+        return fc_extractor(input, input_size), 30
     else:
         return conv_extractor(input), 512
 

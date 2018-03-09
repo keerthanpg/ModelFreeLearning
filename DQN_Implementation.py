@@ -1,17 +1,13 @@
-#!/usr/bin/env python
-import tensorflow as tf, numpy as np, gym, sys, copy, random
+import tensorflow as tf, numpy as np, gym, random
 import config
 import matplotlib.pyplot as plt
 
 
 class QNetwork():
     # This class essentially defines the network architecture.
-    # The network should take in state of the world as an input,
-    # and output Q values of the actions available to the agent as the output.
 
     def __init__(self, env):
-        # Define your network architecture here. It is also a good idea to define any training operations
-        # and optimizers here, initialize your variables, or alternately compile your model here.
+        # Main network architecture, loss calculation and optimizer
         self.tf_sess = None
         self.saver = None
         num_observations = env.observation_space.shape[0]
@@ -28,6 +24,7 @@ class QNetwork():
             self.Q = config.estimate_Q(self.features, input_size=feat_length, num_actions=num_actions,
                                        dueling=config.dueling)
 
+        # Target network for double Q learning (space invaders)
         if config.double:
             with tf.variable_scope('target'):
                 self.tar_features, feat_length = config.extractor(self.states, num_observations, config.extractor_type)
@@ -44,6 +41,7 @@ class QNetwork():
         self.optim = tf.train.AdamOptimizer(learning_rate=config.lr).minimize(self.loss)
 
     def update_target(self):
+        # Synchronization step for double Q learning (space invaders)
         # Get trainable variables
         trainable_variables = tf.trainable_variables()
         # Main net variables
@@ -54,13 +52,12 @@ class QNetwork():
             self.tf_sess.run(tf.assign(trainable_variables_target[i], trainable_variables_main[i]))
 
     def save_model_weights(self, step, model_save_path):
-        # Helper function to save your model / weights.
+        # Helper function to save model weights.
         self.saver.save(self.tf_sess, global_step=step, save_path=model_save_path + config.exp_name)
         print('Model saved to {0}'.format(model_save_path))
 
     def load_model_weights(self, model_load_path):
         # Helper funciton to load model weights.
-        # self.tf_sess.run(tf.global_variables_initializer())
         self.saver.restore(self.tf_sess, model_load_path)
         print('Model loaded from {0}'.format(model_load_path))
 
@@ -68,14 +65,11 @@ class QNetwork():
 class Replay_Memory():
 
     def __init__(self, state_size, memory_size=config.replay_memory_size):
-
-        # The memory essentially stores transitions recorder from the agent
+        # The memory essentially stores transitions recorded from the agent
         # taking actions in the environment.
-
-        # Burn in episodes define the number of episodes that are written into the memory from the
-        # randomly initialized agent. Memory size is the maximum size after which old elements in the memory are replaced.
-        # A simple (if not the most efficient) was to implement the memory is as a list of transitions.
         self.memory_size = memory_size
+
+        # Numpy arrays used as the replay buffer
         if config.extractor_type == 'conv':
             self.states = np.empty((self.memory_size, 84, 84, 4), dtype=np.uint8)
             self.next_states = np.empty((self.memory_size, 84, 84, 4), dtype=np.uint8)
@@ -91,9 +85,7 @@ class Replay_Memory():
 
     def sample_batch(self, batch_size=32):
         # This function returns a batch of randomly sampled transitions - i.e. state, action, reward, next state, terminal flag tuples.
-        # You will feed this to your model to train.
-
-        # Sample batch_size entries and split them into five arrays
+        # Sample batch_size entries from each of the five arrays
         if self.filled:
             batch = np.random.choice(self.memory_size, batch_size)
         else:
@@ -121,7 +113,7 @@ class Replay_Memory():
 
 
 class DQN_Agent():
-    # In this class, we will implement functions to do the following.
+    # In this class, we implement functions to do the following.
     # (1) Create an instance of the Q Network class.
     # (2) Create a function that constructs a policy from the Q values predicted by the Q Network.
     #		(a) Epsilon Greedy Policy.
@@ -131,14 +123,12 @@ class DQN_Agent():
     # (5) Create a function for Experience Replay.
 
     def __init__(self, environment_name):
-
-        # Create an instance of the network itself, as well as the memory.
-        # Here is also a good place to set environmental parameters,
-        # as well as training parameters - number of episodes / iterations, etc.
+        # Create an environment, instance of the network , as well as the memory.
         self.env = gym.make(environment_name)
         self.replay_memory = Replay_Memory(self.env.observation_space.shape[0])
         self.model = QNetwork(self.env)
-        self.action_buffer = np.empty((84, 84, 5), dtype=np.float32)
+        if config.extractor_type == 'conv':
+            self.action_buffer = np.empty((84, 84, 5), dtype=np.float32)
 
     def epsilon_greedy_policy(self, state, i=0):
         # Creating epsilon greedy probabilities to sample from.
@@ -205,16 +195,15 @@ class DQN_Agent():
         return action, reward, next_state, done
 
     def train(self, model_save_path, model_load_path=None):
-        # In this function, we will train our network.
-        # If training without experience replay_memory, then you will interact with the environment
-        # in this function, while also updating your network parameters.
-
-        # If you are using a replay memory, you should interact with environment here, and store these
-        # transitions to memory, while also updating your model.
+        # In this function, we train our network.
+        # If training without experience replay_memory, we interact with the environment and do stochastic updates
+        # If we are using a replay memory, we should interact with environment, store these
+        # transitions to memory, while updating the model by sampling batches from the memory.
         self.model.tf_sess = tf.Session()
         self.model.saver = tf.train.Saver(max_to_keep=config.max_iterations)
         init = tf.global_variables_initializer()
 
+        # To initialize from a checkpoint
         if model_load_path is None:
             self.model.tf_sess.run(init)
         else:
@@ -226,10 +215,13 @@ class DQN_Agent():
         else:
             state = self.env.reset()
 
+        # Variables for generating statistics
         reachCount = 0
         episode_count = 0
         iter = []
         avg_rewards = []
+
+        # Main loop
         for i in range(config.max_iterations + 1):
 
             # Print progress
@@ -240,18 +232,20 @@ class DQN_Agent():
             # Take an epsilon-greedy step
             action, reward, next_state, done = self.epsilon_greedy_policy(state[np.newaxis], i)
 
+            # Reshape reward for linear mountain car
             if done:
                 episode_count += 1
                 if config.env_name == 'MountainCar-v0':
-                    if next_state[0] >= 0.5:
+                    if next_state[0] >= 0.5 and config.extractor_type == 'linear':
                         reachCount += 1
-                        print(reachCount)
+                        #print(reachCount)
                     else:
                         done = not(done)
 
             if config.render:
                 self.env.render()
 
+            # Get the network input
             if config.use_replay:
                 states, actions, rewards, next_states, dones = self.replay_memory.sample_batch(config.batch_size)
             else:
@@ -305,17 +299,17 @@ class DQN_Agent():
             if i % (config.max_iterations // 3) == 0:
                 self.model.save_model_weights(i, model_save_path)
 
+        # Plot the training rewards
         plt.xlabel('iterations')
         plt.ylabel('Approximate reward per episode (train)')
         plt.plot(iter, avg_rewards, 'orange')
         plt.savefig(config.model_path + config.exp_name + 'TrainPlot' + '.png')
 
     def test_stats(self, model_load_path, ep_count):
-        # Evaluates the performance of the agent over 100 episodes, by calculating cummulative rewards for the 100 episodes.
+        # Evaluates the performance of a loaded model over 100 episodes by calculating cumulative rewards.
         self.model.tf_sess = tf.Session()
         self.model.saver = tf.train.Saver()
         self.model.load_model_weights(model_load_path)
-        self.env = gym.wrappers.Monitor(self.env, 'Videos/'+ config.exp_name + '_'+str(step), force=True, video_callable=lambda episode_id: True )
 
         # Initialize
         if config.extractor_type == 'conv':
@@ -352,8 +346,8 @@ class DQN_Agent():
         print('Average reward received: {0}'.format(cumulative_reward / ep_count))
 
     def test_plots(self):
-        # Evaluate the performance of your agent over 100 episodes, by calculating cummulative rewards for the 100 episodes.
-        # Here you need to interact with the environment, irrespective of whether you are using a memory.
+        # Load the models saved during training and evaluate them on 20 episodes each
+        # Generates a plot of the average rewards
         iter = []
         avg_rewards = []
         i = 0
@@ -361,6 +355,9 @@ class DQN_Agent():
             self.model.tf_sess = tf.Session()
             self.model.saver = tf.train.Saver()
             self.model.load_model_weights(config.model_path + config.exp_name + '-' + str(i))
+
+            if config.capture_videos:
+                self.env = gym.wrappers.Monitor(self.env, config.model_path +'/Videos/' + config.exp_name + '_' + str(i), force=True,video_callable=lambda episode_id: True)
 
             # Initialize
             if config.extractor_type == 'conv':
@@ -402,6 +399,7 @@ class DQN_Agent():
             avg_rewards.append(avg_reward)
             i = i + 10000
 
+        # Plot the test rewards
         plt.figure()
         plt.xlabel('iterations')
         plt.ylabel('Average reward per episode (test)')
