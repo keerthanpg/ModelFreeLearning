@@ -15,7 +15,7 @@ render = False
 capture_videos = False
 
 # Whether to train
-train = True
+train = False
 
 # Feature extractor ('linear', 'fc', 'conv')
 extractor_type = 'conv'

@@ -125,7 +125,8 @@ class DQN_Agent():
     def __init__(self, environment_name):
         # Create an environment, instance of the network , as well as the memory.
         self.env = gym.make(environment_name)
-        self.replay_memory = Replay_Memory(self.env.observation_space.shape[0])
+        if config.train:
+            self.replay_memory = Replay_Memory(self.env.observation_space.shape[0])
         self.model = QNetwork(self.env)
         if config.extractor_type == 'conv':
             self.action_buffer = np.empty((84, 84, 5), dtype=np.float32)
