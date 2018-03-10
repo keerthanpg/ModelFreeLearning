@@ -329,6 +329,7 @@ class DQN_Agent():
             # Run the test policy
             action, reward, next_state, done = self.greedy_policy(state[np.newaxis])
             cumulative_reward += reward
+            episodic_reward += reward
 
             if config.render:
                 self.env.render()
