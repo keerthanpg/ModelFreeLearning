@@ -1,6 +1,6 @@
 import tensorflow as tf, numpy as np, gym, random
-import config
 import matplotlib.pyplot as plt
+import config
 
 
 class QNetwork():
@@ -312,8 +312,9 @@ class DQN_Agent():
         self.model.tf_sess = tf.Session()
         self.model.saver = tf.train.Saver()
         self.model.load_model_weights(model_load_path)
+
         if config.capture_videos:
-            self.env = gym.wrappers.Monitor(self.env, config.model_path +'Videos/' + config.exp_name + '_' + str(step), force=True,video_callable=lambda episode_id: True)
+            self.env = gym.wrappers.Monitor(self.env, config.model_path +'videos/' + config.exp_name + '_' + str(step), force=True,video_callable=lambda episode_id: True)
                 
         rewards=[]
         # Initialize
@@ -323,7 +324,7 @@ class DQN_Agent():
             state = self.env.reset()
         episodes = 0
         cumulative_reward = 0.
-        episodic_reward=0.
+        episodic_reward = 0.
 
         while episodes < ep_count:
 
@@ -341,13 +342,15 @@ class DQN_Agent():
                     state = config.preprocess(self.env.reset())
                     episodes += 1
                     rewards.append(episodic_reward)
-                    episodic_reward=0.
+                    episodic_reward = 0.
                 else:
                     state = next_state[0, :, :, 0]
             else:
                 if done:
                     state = self.env.reset()
                     episodes += 1
+                    rewards.append(episodic_reward)
+                    episodic_reward = 0.
                 else:
                     state = next_state
 
@@ -365,9 +368,6 @@ class DQN_Agent():
             self.model.tf_sess = tf.Session()
             self.model.saver = tf.train.Saver()
             self.model.load_model_weights(config.model_path + config.exp_name + '-' + str(i))
-
-            if config.capture_videos:
-                self.env = gym.wrappers.Monitor(self.env, config.model_path +'Videos/' + config.exp_name, force=True,video_callable=lambda episode_id: True)
 
             # Initialize
             if config.extractor_type == 'conv':
@@ -455,11 +455,13 @@ def main():
         agent.train(config.model_path)
 
     # Generate test plots (average rewards over 20 episodes)
-    # agent.test_plots()
+    if config.plot:
+        agent.test_plots()
 
     # Generate test statistics (average over 100 episodes)
-    step=int(input("Enter iteration step"))
-    agent.test_stats(config.model_path + config.exp_name + '-' + str(step), 100, step)    
+    if config.stats:
+        step=int(input("Enter iteration step\n"))
+        agent.test_stats(config.model_path + config.exp_name + '-' + str(step), 100, step)
 
 
 if __name__ == '__main__':
